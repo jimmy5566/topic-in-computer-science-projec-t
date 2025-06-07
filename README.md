@@ -19,9 +19,6 @@ This project demonstrates the priority inversion problem and its solution using 
      gh codespace code
      ```
 
-3. **No Extensions Needed**
-   - This project does not require any VS Code extensions. All you need is a C compiler (GCC) and make sure you are in a Linux environment (Codespaces provides this by default).
-
 ## How to Run the `original_system.c` Demo
 
 1. **Compile the Code**
@@ -40,6 +37,25 @@ This project demonstrates the priority inversion problem and its solution using 
 
 3. **Expected Output**
    - The program will print logs showing the behavior of low, medium, and high priority tasks, demonstrating the priority inversion problem.
+
+## How to Run the `priority_inheritance.c` Demo
+
+1. **Compile the Code**
+   - Open the integrated terminal in Codespaces.
+   - Run:
+     ```bash
+     gcc priority_inheritance.c -o priority_inheritance -lpthread
+     ```
+   - Becasue I have done this step and push the file on the github, you can skip this step
+
+2. **Run the Program with Real-Time Scheduling**
+   - You need to use `sudo` to enable real-time scheduling and priority inheritance:
+     ```bash
+     sudo ./priority_inheritance
+     ```
+
+3. **Expected Output**
+   - The program will print logs showing the behavior of low, medium, and high priority tasks, demonstrating how priority inheritance solves the priority inversion problem.
 
 ---
 
