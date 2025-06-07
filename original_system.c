@@ -90,6 +90,9 @@ int main() {
     pthread_attr_setschedparam(&attr, &param);
     pthread_create(&medium, &attr, medium_priority_task, NULL);
 
+    // Sleep to ensure medium-priority task runs at least once before high is created
+    sleep(1);
+
     // Set high priority for the high-priority task
     param.sched_priority = 30;
     pthread_attr_setschedparam(&attr, &param);
