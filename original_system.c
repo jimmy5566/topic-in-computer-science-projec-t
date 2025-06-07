@@ -41,8 +41,16 @@ void* high_priority_task(void* arg) {
     sleep(1);
     printf("High-priority task: trying to lock the data...\n");
 
-    // Attempt to lock the mutex (may be blocked if low-priority task holds it)
-    pthread_mutex_lock(&data_mutex);
+    // Try to lock the mutex without blocking
+    if (pthread_mutex_trylock(&data_mutex) != 0) {
+        printf("High-priority task: failed to lock the data, will block until available...\n");
+        // Block until the mutex becomes available
+        pthread_mutex_lock(&data_mutex);
+        // if the mutex is not available, this will block here, until the low-priority task releases it. 
+        printf("High-priority task: finally locked the data now!!!\n");
+    } else {
+        printf("High-priority task: locked the data immediately.\n");
+    }
 
     // Update the shared data after acquiring the lock
     shared_data += 1;
