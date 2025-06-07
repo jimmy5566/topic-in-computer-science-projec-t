@@ -9,54 +9,58 @@ pthread_mutex_t data_mutex;
 
 // Low-priority task thread function
 void* low_priority_task(void* arg) {
-    // Lock the mutex to access shared data
-    pthread_mutex_lock(&data_mutex);
-    printf("Low-priority task: locked the data.\n");
-    sleep(2); // Simulate resource usage (holding the lock for a while)
+    for (int round = 0; round < 10; round++) { // Run more times to make the task last longer
+        pthread_mutex_lock(&data_mutex);
+        printf("Low-priority task: locked the data.\n");
+        sleep(2);
 
-    // Read the shared data while holding the lock
-    printf("Low-priority task: reading data: %d\n", shared_data);
-    sleep(3); // Intentionally delay releasing the lock to simulate priority inversion
+        printf("Low-priority task: reading data: %d\n", shared_data);
+        sleep(3);
 
-    // Unlock the mutex after finishing work
-    pthread_mutex_unlock(&data_mutex);
-    printf("Low-priority task: unlocked the data.\n");
+        pthread_mutex_unlock(&data_mutex);
+        printf("Low-priority task: unlocked the data.\n");
+        sleep(1); // Optional: avoid immediate re-locking
+    }
     return NULL;
 }
 
 // Medium-priority task thread function
 void* medium_priority_task(void* arg) {
-    // This task runs independently and does not access shared data
-    // It simulates CPU usage that could preempt the high-priority task
-    for (int i = 0; i < 5; i++) {
-        printf("Medium-priority task: running...\n");
-        sleep(1);
+    for (int i = 0; i < 40; i++) { // Control the number of printouts
+        // A longer waiting period is carried out before each print operation.
+        for (volatile int j = 0; j < 200000000; j++) {
+            // Busy wait, do nothing, just occupy CPU
+        }
+        printf("Medium-priority task: running... (step %d)\n", i + 1);
     }
     return NULL;
 }
 
 // High-priority task thread function
 void* high_priority_task(void* arg) {
-    // Sleep to ensure the low-priority task starts first and locks the mutex
-    sleep(1);
     printf("High-priority task: trying to lock the data...\n");
+    // Keep trying to lock the mutex, print message if failed
+    while (pthread_mutex_trylock(&data_mutex) != 0) {
+        printf("High-priority task: cannot run because low-priority task locked the data, will wait...\n");
+        // Busy wait a little to reduce CPU preemption frequency
+        for (volatile int k = 0; k < 160000000; k++) {
+            // Short busy wait
+        }
+    }
+    printf("High-priority task: finally locked the data now!!!!!!!!!\n");
 
-    // Try to lock the mutex without blocking
-    if (pthread_mutex_trylock(&data_mutex) != 0) {
-        printf("High-priority task: failed to lock the data, will block until available...\n");
-        // Block until the mutex becomes available
-        pthread_mutex_lock(&data_mutex);
-        // if the mutex is not available, this will block here, until the low-priority task releases it. 
-        printf("High-priority task: finally locked the data now!!!\n");
-    } else {
-        printf("High-priority task: locked the data immediately.\n");
+    printf("High-priority task: locked the data (hold for all rounds).\n");
+    for (int round = 0; round < 10; round++) {
+        // Busy work, do not sleep
+        for (volatile int j = 0; j < 100000000; j++) {
+            // Busy wait
+        }
+        printf("High-priority task: working... (round %d)\n", round + 1);
+
+        shared_data += 1;
+        printf("High-priority task: updated data to %d\n", shared_data);
     }
 
-    // Update the shared data after acquiring the lock
-    shared_data += 1;
-    printf("High-priority task: updated data to %d\n", shared_data);
-
-    // Unlock the mutex after updating
     pthread_mutex_unlock(&data_mutex);
     printf("High-priority task: unlocked the data.\n");
     return NULL;
@@ -68,13 +72,28 @@ int main() {
     // Initialize the mutex before creating threads
     pthread_mutex_init(&data_mutex, NULL);
 
-    // Create the low-priority thread first to ensure it locks the mutex
-    pthread_create(&low, NULL, low_priority_task, NULL);
-    sleep(1); // Ensure the low-priority task runs first and locks the mutex
+    // Set thread attributes and scheduling parameters before creating threads
+    pthread_attr_t attr;
+    struct sched_param param;
 
-    // Create the medium-priority and high-priority threads
-    pthread_create(&medium, NULL, medium_priority_task, NULL);
-    pthread_create(&high, NULL, high_priority_task, NULL);
+    // Set the scheduling policy to real-time FIFO
+    pthread_attr_init(&attr);
+    pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
+
+    // Set low priority for the low-priority task
+    param.sched_priority = 10;
+    pthread_attr_setschedparam(&attr, &param);
+    pthread_create(&low, &attr, low_priority_task, NULL);
+
+    // Set medium priority for the medium-priority task
+    param.sched_priority = 20;
+    pthread_attr_setschedparam(&attr, &param);
+    pthread_create(&medium, &attr, medium_priority_task, NULL);
+
+    // Set high priority for the high-priority task
+    param.sched_priority = 30;
+    pthread_attr_setschedparam(&attr, &param);
+    pthread_create(&high, &attr, high_priority_task, NULL);
 
     // Wait for all threads to finish
     pthread_join(low, NULL);
