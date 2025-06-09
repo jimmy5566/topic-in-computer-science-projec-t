@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sched.h>
 
-// Global shared data and mutex for synchronization
+// Global shared data and mutex
 int shared_data = 0;
 pthread_mutex_t data_mutex;
 
@@ -29,7 +30,7 @@ void* medium_priority_task(void* arg) {
     for (int i = 0; i < 40; i++) { // Control the number of printouts
         // A longer waiting period is carried out before each print operation.
         for (volatile int j = 0; j < 200000000; j++) {
-            // Busy wait, do nothing, just occupy CPU
+            if (j % 10000000 == 0) sched_yield();
         }
         printf("Medium-priority task: running... (step %d)\n", i + 1);
     }
@@ -68,42 +69,53 @@ void* high_priority_task(void* arg) {
 
 int main() {
     pthread_t low, medium, high;
-
-    // Initialize the mutex before creating threads
-    pthread_mutex_init(&data_mutex, NULL);
-
-    // Set thread attributes and scheduling parameters before creating threads
-    pthread_attr_t attr;
+    pthread_mutexattr_t attr;
+    pthread_attr_t thread_attr;
     struct sched_param param;
 
-    // Set the scheduling policy to real-time FIFO
-    pthread_attr_init(&attr);
-    pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
+    // Initialize mutex attributes
+    pthread_mutexattr_init(&attr);
+
+    // Set the mutex protocol to priority inheritance.
+    // This is the key point: it enables the priority inheritance protocol,
+    // so that if a high-priority thread is blocked by a low-priority thread
+    // holding the mutex, the low-priority thread will temporarily inherit
+    // the higher priority, preventing medium-priority threads from running
+    // and thus avoiding unbounded priority inversion.
+    pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+
+    // Initialize the mutex with the priority inheritance attribute
+    pthread_mutex_init(&data_mutex, &attr);
+
+    // Set thread attributes and scheduling parameters before creating threads
+    pthread_attr_init(&thread_attr);
+    pthread_attr_setschedpolicy(&thread_attr, SCHED_FIFO);
 
     // Set low priority for the low-priority task
     param.sched_priority = 10;
-    pthread_attr_setschedparam(&attr, &param);
-    pthread_create(&low, &attr, low_priority_task, NULL);
+    pthread_attr_setschedparam(&thread_attr, &param);
+    pthread_create(&low, &thread_attr, low_priority_task, NULL);
 
     // Set medium priority for the medium-priority task
     param.sched_priority = 20;
-    pthread_attr_setschedparam(&attr, &param);
-    pthread_create(&medium, &attr, medium_priority_task, NULL);
+    pthread_attr_setschedparam(&thread_attr, &param);
+    pthread_create(&medium, &thread_attr, medium_priority_task, NULL);
 
     // Sleep to ensure medium-priority task runs at least once before high is created
     sleep(1);
 
     // Set high priority for the high-priority task
     param.sched_priority = 30;
-    pthread_attr_setschedparam(&attr, &param);
-    pthread_create(&high, &attr, high_priority_task, NULL);
+    pthread_attr_setschedparam(&thread_attr, &param);
+    pthread_create(&high, &thread_attr, high_priority_task, NULL);
 
     // Wait for all threads to finish
     pthread_join(low, NULL);
     pthread_join(medium, NULL);
     pthread_join(high, NULL);
 
-    // Destroy the mutex after all threads have finished
+    // Clean up mutex and attributes
     pthread_mutex_destroy(&data_mutex);
+    pthread_mutexattr_destroy(&attr);
     return 0;
 }
